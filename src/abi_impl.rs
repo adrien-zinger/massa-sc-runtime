@@ -7,7 +7,7 @@
 ///!
 ///! ```
 use crate::env::{
-    get_remaining_points_for_env, sub_remaining_gas, sub_remaining_gas_with_mult, Env,
+    get_remaining_points, set_remaining_points, sub_remaining_gas, sub_remaining_gas_with_mult, Env,
 };
 use crate::settings;
 use crate::types::Response;
@@ -54,17 +54,22 @@ fn call_module(
         Err(err) => abi_bail!(err),
     };
     match crate::execution_impl::exec(
-        get_remaining_points_for_env(env)?,
+        get_remaining_points(env)?,
         None,
         module,
         function,
         param,
         &*env.interface,
     ) {
-        Ok(resp) => match env.interface.finish_call() {
-            Ok(_) => Ok(resp),
-            Err(err) => abi_bail!(err),
-        },
+        Ok(resp) => {
+            if let Err(err) = set_remaining_points(env, resp.remaining_gas) {
+                abi_bail!(err);
+            }
+            match env.interface.finish_call() {
+                Ok(_) => Ok(resp),
+                Err(err) => abi_bail!(err),
+            }
+        }
         Err(err) => abi_bail!(err),
     }
 }
@@ -171,7 +176,7 @@ pub(crate) fn assembly_script_call_module(
 
 pub(crate) fn assembly_script_get_remaining_gas(env: &Env) -> ABIResult<i64> {
     sub_remaining_gas(env, settings::metering_remaining_gas())?;
-    Ok(get_remaining_points_for_env(env)? as i64)
+    Ok(get_remaining_points(env)? as i64)
 }
 
 /// Create an instance of VM from a module with a
@@ -414,6 +419,81 @@ pub(crate) fn assembly_script_get_time(env: &Env) -> ABIResult<i64> {
     match env.interface.get_time() {
         Err(err) => abi_bail!(err),
         Ok(t) => Ok(t as i64),
+    }
+}
+
+/// sends an async message
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn assembly_script_send_message(
+    env: &Env,
+    target_address: i32,
+    target_handler: i32,
+    validity_start_period: i64,
+    validity_start_thread: i32,
+    validity_end_period: i64,
+    validity_end_thread: i32,
+    max_gas: i64,
+    gas_price: i64,
+    raw_coins: i64,
+    data: i32,
+) -> ABIResult<()> {
+    sub_remaining_gas(env, settings::metering_send_message())?;
+    let validity_start: (u64, u8) = match (
+        validity_start_period.try_into(),
+        validity_start_thread.try_into(),
+    ) {
+        (Ok(p), Ok(t)) => (p, t),
+        (Err(_), _) => abi_bail!("negative validity start period"),
+        (_, Err(_)) => abi_bail!("invalid validity start thread"),
+    };
+    let validity_end: (u64, u8) = match (
+        validity_end_period.try_into(),
+        validity_end_thread.try_into(),
+    ) {
+        (Ok(p), Ok(t)) => (p, t),
+        (Err(_), _) => abi_bail!("negative validity end period"),
+        (_, Err(_)) => abi_bail!("invalid validity end thread"),
+    };
+    if max_gas.is_negative() {
+        abi_bail!("negative max gas");
+    }
+    if gas_price.is_negative() {
+        abi_bail!("negative gas price");
+    }
+    if raw_coins.is_negative() {
+        abi_bail!("negative coins")
+    }
+    let memory = get_memory!(env);
+    match env.interface.send_message(
+        &get_string(memory, target_address)?,
+        &get_string(memory, target_handler)?,
+        validity_start,
+        validity_end,
+        max_gas as u64,
+        gas_price as u64,
+        raw_coins as u64,
+        get_string(memory, data)?.as_bytes(),
+    ) {
+        Err(err) => abi_bail!(err),
+        Ok(_) => Ok(()),
+    }
+}
+
+/// gets the period of the current execution slot
+pub(crate) fn assembly_script_get_current_period(env: &Env) -> ABIResult<i64> {
+    sub_remaining_gas(env, settings::metering_get_current_period())?;
+    match env.interface.get_current_period() {
+        Err(err) => abi_bail!(err),
+        Ok(v) => Ok(v as i64),
+    }
+}
+
+/// gets the thread of the current execution slot
+pub(crate) fn assembly_script_get_current_thread(env: &Env) -> ABIResult<i32> {
+    sub_remaining_gas(env, settings::metering_get_current_thread())?;
+    match env.interface.get_current_thread() {
+        Err(err) => abi_bail!(err),
+        Ok(v) => Ok(v as i32),
     }
 }
 

@@ -57,8 +57,14 @@ struct Metering {
     pub get_time: u64,
     #[cornetto(const, 100)]
     pub get_call_coins: u64,
+    #[cornetto(const, 50)]
+    pub get_current_period: u64,
+    #[cornetto(const, 50)]
+    pub get_current_thread: u64,
     #[cornetto(const, 24)]
     pub max_number_of_pages: u32,
+    #[cornetto(const, 100)]
+    pub send_message: u64,
 }
 
 pub(crate) fn metering_call() -> u64 {
@@ -161,8 +167,20 @@ pub(crate) fn metering_get_time() -> u64 {
     METERING.get_time()
 }
 
+pub(crate) fn metering_get_current_period() -> u64 {
+    METERING.get_current_period()
+}
+
+pub(crate) fn metering_get_current_thread() -> u64 {
+    METERING.get_current_thread()
+}
+
 pub(crate) fn max_number_of_pages() -> u32 {
     METERING.max_number_of_pages()
+}
+
+pub(crate) fn metering_send_message() -> u64 {
+    METERING.send_message()
 }
 
 #[cfg(test)]
