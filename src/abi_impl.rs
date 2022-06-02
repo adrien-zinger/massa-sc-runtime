@@ -166,15 +166,22 @@ pub(crate) fn assembly_script_call_module(
 
     let param = get_exported_ptr(memory, param)?;
     let response = call_module(env, address, function, &Some(param), call_coins)?;
-    match response.ret {
+    let res_offset = match response.ret {
         Some(ret) => match AnyPtr::import(&ret, &env.wasm_env) {
             Ok(ret_ptr) => Ok(ret_ptr.offset() as i32),
-            Err(err) => abi_bail!(format!(
-                "cannot allocate response in call {}::{}\n{}",
-                address, function, err
-            )),
+            Err(err) => Err(err),
         },
-        None => abi_bail!("calling a module should return a value"),
+        None => match StringPtr::alloc(&String::new(), &env.wasm_env) {
+            Ok(ret_ptr) => Ok(ret_ptr.offset() as i32),
+            Err(err) => Err(err),
+        },
+    };
+    match res_offset {
+        Ok(offset) => Ok(offset),
+        Err(err) => abi_bail!(format!(
+            "cannot allocate response in call {}::{}\n{}",
+            address, function, err
+        )),
     }
 }
 
